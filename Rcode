@@ -1,0 +1,103 @@
+####################################################################################
+### CODIGO PARA PRODUZIR A LISTA POTENCIAL DE ESPECIES PARA OS LOCAIS AMOSTRADOS ###
+####################################################################################
+
+# Carrega os pacotes
+library(rgdal)
+library(reshape2)
+
+# Importa os shapefiles de distribuicao das aves
+shp1 = readOGR("C:/Users/Anderson/Downloads/redlist_species_data_5576d2db-a41e-4a91-8e4e-d9b05df27a6a", "data_0")
+
+# Importa as coordenadas dos Locais
+locais = read.csv("C:/Users/Anderson/Downloads/Coordenadas locais.csv")
+
+# Converte as coordenadas em shapefile (de pontos)
+pts = SpatialPointsDataFrame(coords = cbind(locais$Longitude,
+                                            locais$Latitude),
+                             data = locais,
+                             proj4string = shp1@proj4string)
+
+# Subset do shp1
+shp1_sub = shp1[pts, ]
+remove(shp1)
+
+shp2 = readOGR("C:/Users/Anderson/Downloads/redlist_species_data_5576d2db-a41e-4a91-8e4e-d9b05df27a6a", "data_1")
+shp2_sub = shp2[pts, ]
+remove(shp2)
+
+shp3 = readOGR("C:/Users/Anderson/Downloads/redlist_species_data_9f995a92-bfae-4164-8971-1a3e3eeb0790", "data_0")
+shp3_sub = shp3[pts, ]
+remove(shp3)
+
+shp4 = readOGR("C:/Users/Anderson/Downloads/redlist_species_data_9f995a92-bfae-4164-8971-1a3e3eeb0790", "data_1")
+shp4_sub = shp4[pts, ]
+remove(shp4)
+
+shp5 = readOGR("C:/Users/Anderson/Downloads/redlist_species_data_9f995a92-bfae-4164-8971-1a3e3eeb0790", "data_2")
+shp5_sub = shp5[pts, ]
+remove(shp5)
+
+# Junta os 5 shapefiles em 1
+maps_birds_pilar = rbind(shp1_sub, shp2_sub, shp3_sub, shp4_sub, shp5_sub)
+
+### SPECIES SUBSET ###
+# Species polygon inclusion criteria (Schuster et al. 2019)
+# https://doi.org/10.1016/j.envsci.2019.07.002
+# 1. Presence = Extant (1)
+# 2. Origin = Native (1); Reintroduced (2)
+# 3. Seasonal = Resident (1); Breeding Season (2); Non-breeding Season (3)
+maps_birds_pilar_subset = subset(maps_birds_pilar,
+                                 PRESENCE == 1 &
+                                   ORIGIN != 3 &
+                                   ORIGIN != 4 &
+                                   ORIGIN != 5 &
+                                   ORIGIN != 6 &
+                                   SEASONAL != 4 &
+                                   SEASONAL != 5)
+
+# Atualiza o nome das especies, segundo BirdLife 2002 (versao 7.0)
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Chlorostilbon notatus"] = "Chlorestes notata"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia sapphirina"] = "Hylocharis sapphirina"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia cyanus"] = "Chlorestes cyanus"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Leucippus chlorocercus"] = "Talaphorus chlorocercus"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia brevirostris"] = "Chrysuronia brevirostris"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia versicolor"] = "Chrysuronia versicolor"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia fimbriata"] = "Chionomesa fimbriata"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia leucogaster"] = "Chrysuronia leucogaster"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia amazilia"] = "Amazilis amazilia"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia bartletti"] = "Chionomesa bartletti"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia oenone"] = "Chrysuronia oenone"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia amabilis"] = "Polyerata amabilis"
+maps_birds_pilar_subset$BINOMIAL[maps_birds_pilar_subset$BINOMIAL == "Amazilia julie"] = "Chlorestes julie"
+
+# Sobrepoe os pontos com os mapas
+spp_locais = as.data.frame(
+  gIntersects(pts, maps_birds_pilar_subset, byid = TRUE))
+
+# Converte TRUE em 1 e FALSE em 0
+spp_locais = spp_locais * 1
+
+# Adiciona o nome dos locais e das especies
+colnames(spp_locais) = locais$Local
+spp_locais$species = maps_birds_pilar_subset$BINOMIAL
+
+# Converte a tabela para o formato longo
+spp_locais_melt = melt(spp_locais)
+
+# Mantem apenas os registros de presenca e exclui os de ausencia
+spp_locais_melt_presence = subset(spp_locais_melt, value == 1)
+
+# Produz a lista de especies
+spp_list_pilar = unique(spp_locais_melt_presence[2:1])
+
+# Ordena a lista por ordem alfabetica de "local" e "species"
+spp_list_pilar = spp_list_pilar[order(spp_list_pilar$variable,
+                                      spp_list_pilar$species), ]
+
+# Renomeia as colunas
+colnames(spp_list_pilar) = c("local", "species")
+
+# Visualiza a lista de especies
+rbind(head(spp_list_pilar),
+      tail(spp_list_pilar))
